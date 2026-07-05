@@ -107,6 +107,20 @@ export function OrdersLive({ hotel, settings, initialOrders, initialTables, menu
 
   const supabase = createClient();
 
+  // Load any waiter calls that were already pending before this page opened —
+  // the realtime listener below only catches NEW ones.
+  useEffect(() => {
+    supabase
+      .from("waiter_calls")
+      .select("*")
+      .eq("hotel_id", hotel.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (data && data.length > 0) setWaiterCalls(data as WaiterCall[]);
+      });
+  }, [hotel.id, supabase]);
+
   // Setup real-time listeners for orders and waiter calls
   useEffect(() => {
     const channel = supabase
@@ -182,13 +196,19 @@ export function OrdersLive({ hotel, settings, initialOrders, initialTables, menu
       
       const isOccupied = activeOrdersForTable.length > 0;
       const primaryOrder = isOccupied ? activeOrdersForTable[0] : null;
-      const billBreakdown = primaryOrder ? computeBill(primaryOrder, settings) : null;
+      // Card total covers ALL active orders on the table (e.g. staff-created +
+      // customer-created), so the floor map never under-reports a table.
+      const billTotal = activeOrdersForTable.reduce(
+        (sum, o) => sum + computeBill(o, settings).grandTotal,
+        0
+      );
 
       return {
         table: t,
         isOccupied,
         activeOrder: primaryOrder,
-        billTotal: billBreakdown ? billBreakdown.grandTotal : 0,
+        activeCount: activeOrdersForTable.length,
+        billTotal,
         orderTime: primaryOrder ? primaryOrder.created_at : null,
       };
     });
@@ -452,7 +472,7 @@ export function OrdersLive({ hotel, settings, initialOrders, initialTables, menu
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
-          {filteredTableData.map(({ table, isOccupied, activeOrder, billTotal, orderTime }) => {
+          {filteredTableData.map(({ table, isOccupied, activeOrder, activeCount, billTotal, orderTime }) => {
             return (
               <motion.div
                 key={table.id}
@@ -489,6 +509,9 @@ export function OrdersLive({ hotel, settings, initialOrders, initialTables, menu
                       <p className="text-[10px] text-neutral-400 mt-0.5 flex items-center justify-center gap-1">
                         <Clock size={10} />
                         {orderTime ? timeAgo(orderTime) : ""}
+                        {activeCount > 1 && (
+                          <span className="text-amber-600 font-bold">· {activeCount} orders</span>
+                        )}
                       </p>
                     </div>
                   ) : (

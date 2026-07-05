@@ -18,7 +18,8 @@ export default async function RevenuePage() {
       .from("orders")
       .select("*")
       .eq("hotel_id", hotel.id)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .limit(1000),
     supabase.from("hotel_settings").select("*").eq("hotel_id", hotel.id).maybeSingle(),
     supabase.from("tables").select("*").eq("hotel_id", hotel.id).order("created_at"),
   ]);

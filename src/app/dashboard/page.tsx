@@ -13,6 +13,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getAuthUser, getHotelByOwner } from "@/lib/supabase/cached-queries";
 import { MenuLinkActions } from "./menu-link-actions";
+import { TodayStats } from "./today-stats";
+import type { HotelSettings, Order } from "@/types/database";
 
 type Step = {
   key: string;
@@ -33,13 +35,23 @@ export default async function DashboardPage() {
 
   const supabase = await createClient();
 
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
   // Counts + onboarding signals, all in parallel.
-  const [itemRes, catRes, availRes, settingsRes, paymentRes] = await Promise.all([
+  const [itemRes, catRes, availRes, settingsRes, paymentRes, todayOrdersRes] = await Promise.all([
     supabase.from("menu_items").select("*", { count: "exact", head: true }).eq("hotel_id", hotel.id),
     supabase.from("categories").select("*", { count: "exact", head: true }).eq("hotel_id", hotel.id),
     supabase.from("menu_items").select("*", { count: "exact", head: true }).eq("hotel_id", hotel.id).eq("is_available", true),
-    supabase.from("hotel_settings").select("logo_url").eq("hotel_id", hotel.id).maybeSingle(),
+    supabase.from("hotel_settings").select("logo_url,currency,gst_enabled,gst_percent").eq("hotel_id", hotel.id).maybeSingle(),
     supabase.from("hotel_payment_secrets").select("hotel_id").eq("hotel_id", hotel.id).maybeSingle(),
+    supabase
+      .from("orders")
+      .select("id,items,total,status,created_at,table_number")
+      .eq("hotel_id", hotel.id)
+      .gte("created_at", startOfDay.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(500),
   ]);
 
   const itemCount = itemRes.count ?? 0;
@@ -79,6 +91,12 @@ export default async function DashboardPage() {
         <h1 className="text-xl font-bold text-[#0F0E17]">Good day! 👋</h1>
         <p className="text-sm text-[#6B7280] mt-0.5">{hotel.name}</p>
       </div>
+
+      <TodayStats
+        hotelId={hotel.id}
+        settings={(settingsRes.data as Pick<HotelSettings, "gst_enabled" | "gst_percent" | "currency" | "logo_url"> | null) ?? null}
+        initialOrders={(todayOrdersRes.data as Order[]) ?? []}
+      />
 
       {showChecklist && (
         <div className="bg-white border border-[#FED7AA] rounded-3xl p-5 mt-5 shadow-sm">

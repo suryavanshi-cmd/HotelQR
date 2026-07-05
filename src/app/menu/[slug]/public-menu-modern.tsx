@@ -222,6 +222,37 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
     }
   }, [orderKey]);
 
+  // Live status — poll the token-gated RPC (anon can't SELECT orders) so the
+  // customer sees the kitchen move their order through preparing → served
+  // without refreshing. Cheap: one tiny RPC every 12s, only while active.
+  useEffect(() => {
+    if (!activeOrder || activeOrder.status === "cancelled" || activeOrder.status === "completed") return;
+    const { id: orderId, token } = activeOrder;
+
+    let stopped = false;
+    async function check() {
+      if (stopped || document.visibilityState === "hidden") return;
+      const { data } = await supabase.rpc("get_order_status", { p_order_id: orderId, p_token: token });
+      if (stopped || !data) return;
+      const mapped = (data === "done" ? "completed" : data) as ActiveOrder["status"];
+      setActiveOrder((prev) => {
+        if (!prev || prev.id !== orderId || prev.status === mapped) return prev;
+        const next = { ...prev, status: mapped };
+        persistOrder(next);
+        if (mapped === "preparing") toast("Your order is being prepared 👨‍🍳");
+        if (mapped === "completed") toast.success("Your order is served — enjoy! 🍽️");
+        return next;
+      });
+    }
+    check();
+    const t = setInterval(check, 12_000);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeOrder?.id, activeOrder?.status, supabase]);
+
   function selectCat(catId: string) {
     setActiveCatId(catId);
     document.getElementById(`cat-${catId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -734,7 +765,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
           manualTable={manualTable}
           setManualTable={setManualTable}
           placing={placing}
-          appendMode={Boolean(activeOrder && activeOrder.status === "new")}
+          appendMode={Boolean(activeOrder && (activeOrder.status === "new" || activeOrder.status === "preparing"))}
           onClose={() => setCartOpen(false)}
           onChangeQty={changeQty}
           onPlaceOrder={placeOrder}
@@ -1317,9 +1348,20 @@ function OrderStatus({
 
   const remaining = Math.max(0, order.placedAt + order.cancelMinutes * 60_000 - now);
   const cancelled = order.status === "cancelled";
-  const canCancel = !cancelled && order.cancelMinutes > 0 && remaining > 0;
+  const completed = order.status === "completed";
+  const canCancel = order.status === "new" && order.cancelMinutes > 0 && remaining > 0;
   const mm = Math.floor(remaining / 60000);
   const ss = String(Math.floor((remaining % 60000) / 1000)).padStart(2, "0");
+
+  const stepIdx = completed ? 2 : order.status === "preparing" ? 1 : 0;
+  const headerColor = cancelled ? "#6B7280" : completed ? "#10B981" : themeColor;
+  const title = cancelled
+    ? "Order cancelled"
+    : completed
+    ? "Order served!"
+    : order.status === "preparing"
+    ? "Being prepared"
+    : "Order placed!";
 
   async function handleCancel() {
     setCancelling(true);
@@ -1330,7 +1372,7 @@ function OrderStatus({
   return (
     <div className={`fixed inset-0 z-[60] mx-auto w-full ${FRAME} bg-[#FFFAF3] flex flex-col`}>
       {/* Header */}
-      <div className="px-5 pt-6 pb-6 text-white" style={{ backgroundColor: cancelled ? "#6B7280" : themeColor }}>
+      <div className="px-5 pt-6 pb-6 text-white" style={{ backgroundColor: headerColor }}>
         <button onClick={onBack} className="flex items-center gap-1 text-white/90 text-sm mb-4 min-h-0 min-w-0">
           <ChevronLeft size={16} /> Back to menu
         </button>
@@ -1338,7 +1380,7 @@ function OrderStatus({
           {cancelled ? <XCircle size={30} className="text-white" /> : <CheckCircle2 size={30} className="text-white" />}
           <div>
             <h1 className="text-white text-xl font-semibold" style={{ fontFamily: "var(--font-display)" }}>
-              {cancelled ? "Order cancelled" : "Order placed!"}
+              {title}
             </h1>
             <p className="text-white/80 text-xs mt-0.5">
               Table {order.table} · #{order.id.slice(-4).toUpperCase()}
@@ -1348,6 +1390,51 @@ function OrderStatus({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
+        {/* Live progress stepper — updates as the kitchen moves the order along */}
+        {!cancelled && (
+          <div className="bg-white rounded-3xl border border-[#E5E7EB] p-4 mb-4">
+            <div className="flex items-center">
+              {["Placed", "Preparing", "Served"].map((label, i) => {
+                const reached = i <= stepIdx;
+                const isCurrent = i === stepIdx && !completed;
+                return (
+                  <div key={label} className="flex items-center flex-1 last:flex-none">
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center border-2 transition-colors ${
+                          isCurrent ? "animate-pulse" : ""
+                        }`}
+                        style={{
+                          backgroundColor: reached ? headerColor : "#fff",
+                          borderColor: reached ? headerColor : "#E5E7EB",
+                        }}
+                      >
+                        {reached ? (
+                          <CheckCircle2 size={14} className="text-white" />
+                        ) : (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#D1D5DB]" />
+                        )}
+                      </div>
+                      <span
+                        className="text-[10px] font-semibold mt-1.5"
+                        style={{ color: reached ? headerColor : "#9CA3AF" }}
+                      >
+                        {label}
+                      </span>
+                    </div>
+                    {i < 2 && (
+                      <div
+                        className="flex-1 h-0.5 mx-1.5 -mt-4 rounded-full transition-colors"
+                        style={{ backgroundColor: i < stepIdx ? headerColor : "#E5E7EB" }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Items */}
         <div className="bg-white rounded-3xl border border-[#E5E7EB] p-4">
           {order.items.map((c) => (
@@ -1380,20 +1467,24 @@ function OrderStatus({
           </div>
         )}
 
-        {!cancelled && !canCancel && order.cancelMinutes > 0 && (
+        {!cancelled && !completed && !canCancel && order.cancelMinutes > 0 && (
           <p className="mt-4 text-center text-xs text-[#9CA3AF]">
             Cancellation window has passed — your order is being prepared. 👨‍🍳
           </p>
         )}
 
+        {completed && (
+          <p className="mt-4 text-center text-sm text-[#6B7280]">Your order has been served. Enjoy your meal! 🍽️</p>
+        )}
+
         {cancelled && <p className="mt-4 text-center text-sm text-[#6B7280]">This order was cancelled.</p>}
 
         <button
-          onClick={cancelled ? onBack : onAddMore}
+          onClick={cancelled || completed ? onBack : onAddMore}
           className="mt-5 w-full rounded-2xl py-3.5 text-white font-semibold text-sm active:scale-[0.98] transition-transform"
-          style={{ backgroundColor: themeColor }}
+          style={{ backgroundColor: headerColor }}
         >
-          {cancelled ? "Back to menu" : "Add more items"}
+          {cancelled ? "Back to menu" : completed ? "Done" : "Add more items"}
         </button>
       </div>
     </div>

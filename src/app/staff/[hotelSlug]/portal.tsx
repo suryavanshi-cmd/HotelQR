@@ -36,7 +36,7 @@ type ActiveOrder = {
 };
 type WaiterCall = { id: string; table_number: string | null; created_at: string; assigned_staff_id: string | null };
 
-type Tab = "menu" | "orders" | "new";
+type Tab = "menu" | "orders" | "new" | "calls";
 
 function playBeep() {
   try {
@@ -194,8 +194,8 @@ export function StaffPortal({ slug }: { slug: string }) {
         </button>
       </div>
 
-      {/* Waiter call banners */}
-      {calls.length > 0 && (
+      {/* Waiter call banners (hidden on the Calls tab — it shows the full list) */}
+      {tab !== "calls" && calls.length > 0 && (
         <div className="px-4 pt-3 space-y-2">
           {calls.map((c) => (
             <div key={c.id} className="bg-[#FEFCE8] border border-[#FEF08A] rounded-2xl p-3 flex items-center justify-between gap-3">
@@ -231,6 +231,7 @@ export function StaffPortal({ slug }: { slug: string }) {
             onPlaced={() => { loadOrders(); setTab("orders"); }}
           />
         )}
+        {tab === "calls" && <CallsView calls={calls} onAck={ackCall} />}
       </div>
 
       {/* Bottom tab bar */}
@@ -240,7 +241,7 @@ export function StaffPortal({ slug }: { slug: string }) {
         {canCreateOrders && (
           <TabButton active={tab === "new"} onClick={() => setTab("new")} icon={<Plus size={20} />} label="New order" />
         )}
-        <TabButton active={false} onClick={() => { loadCalls(); }} icon={<ConciergeBell size={20} />} label="Calls" badge={calls.length} />
+        <TabButton active={tab === "calls"} onClick={() => { setTab("calls"); loadCalls(); }} icon={<ConciergeBell size={20} />} label="Calls" badge={calls.length} />
       </nav>
     </div>
   );
@@ -406,6 +407,37 @@ function ItemCard({ item, qty, onAdd, onSub }: { item: MenuItem; qty?: number; o
           {!orderMode && <Badge variant={item.is_available ? "green" : "gray"}>{item.is_available ? "Available" : "Off"}</Badge>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Calls view — pending waiter calls for your tables ───────
+function CallsView({ calls, onAck }: { calls: WaiterCall[]; onAck: (id: string) => void }) {
+  if (calls.length === 0) {
+    return (
+      <EmptyState
+        icon={<ConciergeBell size={24} />}
+        title="No pending calls"
+        description="When a customer at your tables taps 'Call waiter', it shows up here instantly."
+      />
+    );
+  }
+  return (
+    <div className="px-4 py-4 space-y-3">
+      {calls.map((c) => (
+        <div key={c.id} className="bg-white border border-[#E5E7EB] rounded-3xl p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#FEF3C7] flex items-center justify-center shrink-0">
+              <Bell size={18} className="text-[#D97706]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#0F0E17]">Table {c.table_number ?? "?"}</p>
+              <p className="text-xs text-[#9CA3AF]">Called {timeAgo(c.created_at)}</p>
+            </div>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => onAck(c.id)}>Got it</Button>
+        </div>
+      ))}
     </div>
   );
 }
