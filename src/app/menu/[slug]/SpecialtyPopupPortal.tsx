@@ -67,9 +67,12 @@ const sheetVariants = {
   },
 } as const;
 
+// 0.07s per card meant the 14th special landed a full second after the first —
+// the list read as still loading. Tightened so a long menu finishes with the
+// sheet's own slide-in rather than trailing behind it.
 const listVariants = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.08 } },
+  visible: { transition: { staggerChildren: 0.035, delayChildren: 0.06 } },
 } as const;
 
 const cardVariants = {
@@ -526,7 +529,7 @@ export function SpecialtyPopupPortal({
                 ) : (
                   <motion.div
                     variants={listVariants}
-                    initial="hidden"
+                    initial={reduceMotion ? false : "hidden"}
                     animate="visible"
                   >
                     {items.map((item) => (

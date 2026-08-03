@@ -537,13 +537,14 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
           </div>
 
           {/* Food filter pills */}
-          <div className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide rail">
             {(["all", "veg", "non_veg"] as FoodFilter[]).map((f) => (
               <button
                 key={f}
                 onClick={() => setFoodFilter(f)}
                 className={[
-                  "px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 shrink-0 border min-h-0",
+                  "px-3.5 py-2 rounded-full text-[13px] font-semibold flex items-center gap-1.5 shrink-0 border",
+                  "transition-[color,background-color,border-color,transform] duration-200 active:scale-[0.96]",
                   foodFilter === f ? "text-white border-transparent" : "bg-white text-[#6B7280] border-[#E5E7EB]",
                 ].join(" ")}
                 style={foodFilter === f ? { backgroundColor: themeColor } : {}}
@@ -560,7 +561,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
           <motion.div
             ref={stripRef}
             layoutScroll
-            className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide"
+            className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide rail rail-fade scroll-px-4"
           >
             {categories.map((cat) => {
               const active = activeCatId === cat.id;
@@ -574,7 +575,14 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                   className={[
                     // `isolate` keeps the -z-10 pill inside this button's
                     // stacking context instead of sinking behind the nav bar.
-                    "relative isolate px-3 py-1.5 rounded-full text-xs font-medium shrink-0 border min-h-0 flex items-center gap-1",
+                    "relative isolate shrink-0 flex items-center gap-1 rounded-full border",
+                    // Roomier than the old px-3/py-1.5 (~28px tall) — these are
+                    // the primary navigation on a phone and were fiddly to hit.
+                    "px-3.5 py-2 text-[13px] font-semibold",
+                    // Named properties, not transition-all: the sliding pill is
+                    // layout-animated by framer, and a blanket transition made
+                    // the button animate against it.
+                    "transition-[color,background-color,border-color,transform] duration-200 active:scale-[0.96]",
                     active
                       ? "text-white border-transparent"
                       : isSpecial
@@ -620,7 +628,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                   Handpicked today&apos;s finest dishes
                 </p>
               </div>
-              <div className="flex gap-3.5 overflow-x-auto scrollbar-hide px-4 pb-1 snap-x">
+              <div className="flex gap-3.5 overflow-x-auto scrollbar-hide px-4 pb-1 rail snap-x scroll-px-4">
                 {specialItems.map((item) => (
                   <SpecialCard
                     key={item.id}
@@ -651,11 +659,23 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                 <div key={cat.id} id={`cat-${cat.id}`} className="cv-section" style={{ scrollMarginTop: navH }}>
                   {/* Category header */}
                   <div
-                    className="flex items-center justify-between px-4 pt-5 pb-3 sticky z-20 bg-white/85 backdrop-blur-md gpu-layer"
+                    // Solid white, not blur: one blurred layer per category
+                    // header stacked up behind the nav's own blur for no visual
+                    // gain — bg-white/85 over white content already read opaque.
+                    className="flex items-center justify-between px-4 pt-5 pb-3 sticky z-20 bg-white"
                     style={{ top: navH - 1 }}
                   >
-                    <h2 className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight">
-                      {cat.name} <span className="text-[#9CA3AF] font-bold">({catItems.length})</span>
+                    <h2 className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight flex items-center gap-1.5">
+                      {specialCat?.id === cat.id && (
+                        <span
+                          className="w-[22px] h-[22px] rounded-md flex items-center justify-center shrink-0"
+                          style={{ background: "linear-gradient(135deg, #F59E0B 0%, #EA580C 100%)" }}
+                        >
+                          <ChefHat size={12} className="text-white" />
+                        </span>
+                      )}
+                      <span style={specialCat?.id === cat.id ? { color: "#B45309" } : undefined}>{cat.name}</span>
+                      <span className="text-[#9CA3AF] font-bold">({catItems.length})</span>
                     </h2>
                   </div>
 
@@ -1126,7 +1146,7 @@ const SpecialCard = memo(function SpecialCard({
         transition={{ type: "spring", stiffness: 400, damping: 22 }}
         className="relative w-full aspect-square rounded-3xl overflow-hidden bg-amber-50"
         style={{
-          boxShadow: "0 12px_40px rgba(180,83,9,0.16), 0 4px 12px rgba(0,0,0,0.06)",
+          boxShadow: "0 12px 40px rgba(180,83,9,0.16), 0 4px 12px rgba(0,0,0,0.06)",
           border: "1.5px solid rgba(245,158,11,0.18)",
         }}
       >
@@ -1206,12 +1226,24 @@ const CategorySheet = memo(function CategorySheet({
               <button
                 key={cat.id}
                 onClick={() => onPick(cat.id)}
-                className="w-full flex items-center justify-between py-3 border-b border-[#F0F0F2] last:border-0 text-left"
+                aria-current={active ? "true" : undefined}
+                className="w-full flex items-center justify-between py-3 px-2 -mx-1 rounded-xl border-b border-[#F0F0F2] last:border-0 text-left transition-colors active:bg-[#F8F9FA]"
               >
-                <span className="text-[15px] font-semibold" style={{ color: active ? themeColor : "#1C1C2E" }}>
-                  {cat.name}
+                <span className="flex items-center gap-2 min-w-0">
+                  {/* The current section gets a bar, not just a colour — colour
+                      alone is easy to miss at a glance while scrolling. */}
+                  <span
+                    className="w-[3px] h-4 rounded-full shrink-0 transition-colors"
+                    style={{ backgroundColor: active ? themeColor : "transparent" }}
+                  />
+                  <span
+                    className="text-[15px] font-semibold truncate"
+                    style={{ color: active ? themeColor : "#1C1C2E" }}
+                  >
+                    {cat.name}
+                  </span>
                 </span>
-                <span className="flex items-center gap-2 text-[#9CA3AF]">
+                <span className="flex items-center gap-2 text-[#9CA3AF] shrink-0">
                   <span className="text-sm font-medium tabular-nums">{catItems.length}</span>
                   <ChevronRight size={16} />
                 </span>

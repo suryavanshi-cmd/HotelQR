@@ -63,11 +63,36 @@ a,
 }
 
 /* Promote an element to its own compositor layer so sticky bars (with
-   backdrop-blur) are composited instead of repainted on every scroll frame. */
+   backdrop-blur) are composited instead of repainted on every scroll frame.
+
+   Deliberately no `will-change: transform`. It was here, but will-change pins a
+   layer for the element's whole lifetime, and this class sits on the nav, the
+   fixed control overlay and every category header at once — on a mid-range
+   phone that is a standing pile of layers competing for GPU memory with the
+   dish images. translateZ(0) gets the same compositing without the permanent
+   reservation. */
 .gpu-layer {
   transform: translateZ(0);
-  will-change: transform;
   backface-visibility: hidden;
+}
+
+/* Horizontal rails (category tabs, specials carousel). Keeps a sideways flick
+   from chaining into the page scroll — the thing that makes a tab strip feel
+   like it is dragging the whole screen around.
+
+   No scroll-snap here on purpose: the tab strip is centred programmatically by
+   useCategoryNav, and snap points would yank the centred tab back to an edge.
+   The specials carousel opts into snapping itself with Tailwind's snap-x. */
+.rail {
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Fade the strip's edges so a half-scrolled tab reads as "more this way"
+   instead of looking clipped. */
+.rail-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 12px, #000 calc(100% - 12px), transparent);
 }
 
 /* Skip rendering work for off-screen menu sections while swiping — the browser
