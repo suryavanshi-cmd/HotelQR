@@ -8,6 +8,7 @@ import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
 import { SignatureShowcase } from "./SignatureShowcase";
+import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
@@ -54,7 +55,9 @@ function matchesFilters(item: MenuItem, q: string, foodFilter: FoodFilter) {
   if (item.is_available === false) return false;
   if (q && !item.name.toLowerCase().includes(q) && !(item.description ?? "").toLowerCase().includes(q)) return false;
   if (foodFilter === "veg" && item.food_type !== "veg" && item.food_type !== "vegan") return false;
-  if (foodFilter === "non_veg" && item.food_type !== "non_veg") return false;
+  // Egg rides with non-veg — it was excluded by BOTH filters before, so egg
+  // dishes were unfindable except under "All".
+  if (foodFilter === "non_veg" && item.food_type !== "non_veg" && item.food_type !== "egg") return false;
   return true;
 }
 
@@ -96,7 +99,8 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   const [placing, setPlacing] = useState(false);
   const [manualTable, setManualTable] = useState("");
   const [ratings, setRatings] = useState<RatingAgg>({});
-  const [ratingItem, setRatingItem] = useState<MenuItem | null>(null);
+  // Dish detail sheet — opened by tapping any card; rating lives inside it.
+  const [detailItem, setDetailItem] = useState<MenuItem | null>(null);
   const [activeOrder, setActiveOrder] = useState<ActiveOrder | null>(null);
   // The order-status screen overlays the menu. Hiding it (without clearing the
   // active order) lets the customer browse and add more items to the SAME order.
@@ -427,7 +431,6 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
     const key = `rated-${item.id}`;
     if (sessionStorage.getItem(key)) {
       toast("You already rated this dish");
-      setRatingItem(null);
       return;
     }
     setRatings((prev) => {
@@ -435,7 +438,6 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
       return { ...prev, [item.id]: { sum: a.sum + value, count: a.count + 1 } };
     });
     sessionStorage.setItem(key, String(value));
-    setRatingItem(null);
     toast.success("Thanks for rating! 🙏");
     try {
       await supabase.from("item_ratings").insert({
@@ -617,7 +619,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
             themeColor={themeColor}
             onAdd={addToCart}
             onDec={(id) => changeQty(id, -1)}
-            onRate={(item) => setRatingItem(item)}
+            onOpen={setDetailItem}
           />
 
           {!hasResults ? (
@@ -665,7 +667,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                           qty={cartQty[item.id] ?? 0}
                           onAdd={() => addToCart(item)}
                           onDec={() => changeQty(item.id, -1)}
-                          onLongPress={() => setRatingItem(item)}
+                          onOpen={() => setDetailItem(item)}
                         />
                       ))}
                     </div>
@@ -680,7 +682,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                           qty={cartQty[item.id] ?? 0}
                           onAdd={() => addToCart(item)}
                           onDec={() => changeQty(item.id, -1)}
-                          onLongPress={() => setRatingItem(item)}
+                          onOpen={() => setDetailItem(item)}
                         />
                       ))}
                     </div>
@@ -833,8 +835,17 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
       )}
 
       {/* Rating bottom sheet */}
-      {ratingItem && (
-        <RatingSheet item={ratingItem} themeColor={themeColor} onClose={() => setRatingItem(null)} onRate={(v) => submitRating(ratingItem, v)} />
+      {detailItem && (
+        <ItemDetailSheet
+          item={detailItem}
+          rating={ratings[detailItem.id]}
+          qty={cartQty[detailItem.id] ?? 0}
+          themeColor={themeColor}
+          onAdd={() => addToCart(detailItem)}
+          onDec={() => changeQty(detailItem.id, -1)}
+          onRate={(v) => submitRating(detailItem, v)}
+          onClose={() => setDetailItem(null)}
+        />
       )}
 
       {/* Order status — shown after placing, covering the menu like a redirect */}
@@ -845,6 +856,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
           onCancel={cancelOrder}
           onBack={dismissOrder}
           onAddMore={addMoreItems}
+          onRateItem={(id, v) => { const it = items.find((i) => i.id === id); if (it) submitRating(it, v); }}
         />
       )}
     </div>
@@ -995,7 +1007,7 @@ const GridCard = memo(function GridCard({
   qty,
   onAdd,
   onDec,
-  onLongPress,
+  onOpen,
 }: {
   item: MenuItem;
   themeColor: string;
@@ -1003,9 +1015,10 @@ const GridCard = memo(function GridCard({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  onLongPress: () => void;
+  /** Open the dish detail sheet (tap or long-press). */
+  onOpen: () => void;
 }) {
-  const longPress = useLongPress(onLongPress);
+  const longPress = useLongPress(onOpen);
   const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
 
   return (
@@ -1014,8 +1027,15 @@ const GridCard = memo(function GridCard({
       className="bg-white rounded-2xl border overflow-hidden flex flex-col shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
       style={{ borderColor: qty > 0 ? themeColor : "#EDEDF0" }}
     >
-      {/* Image + overlapping ADD pill */}
-      <div className="relative w-full aspect-square bg-[#F4F4F6]">
+      {/* Image + overlapping ADD pill. The photo is the biggest tap target on
+          the card, so it opens the detail — but taps on the overlaid ADD pill
+          must keep adding, hence the closest("button") guard. */}
+      <div
+        className="relative w-full aspect-square bg-[#F4F4F6] cursor-pointer"
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest("button")) onOpen();
+        }}
+      >
         <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
         {item.badge && (
           <span
@@ -1032,7 +1052,7 @@ const GridCard = memo(function GridCard({
       </div>
 
       {/* Details */}
-      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1" {...longPress}>
+      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1 cursor-pointer" onClick={onOpen} {...longPress}>
         <div className="flex items-center gap-1.5">
           <VegIndicator type={item.food_type} />
           <h3 className="text-[13.5px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
@@ -1061,7 +1081,7 @@ const RowCard = memo(function RowCard({
   qty,
   onAdd,
   onDec,
-  onLongPress,
+  onOpen,
 }: {
   item: MenuItem;
   themeColor: string;
@@ -1069,14 +1089,15 @@ const RowCard = memo(function RowCard({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  onLongPress: () => void;
+  /** Open the dish detail sheet (tap or long-press). */
+  onOpen: () => void;
 }) {
-  const longPress = useLongPress(onLongPress);
+  const longPress = useLongPress(onOpen);
   const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
 
   return (
     <motion.div whileTap={{ scale: 0.99 }} className="flex gap-3 py-3">
-      <div className="relative w-[78px] h-[78px] rounded-xl overflow-hidden bg-[#F4F4F6] shrink-0" {...longPress}>
+      <div className="relative w-[78px] h-[78px] rounded-xl overflow-hidden bg-[#F4F4F6] shrink-0 cursor-pointer" onClick={onOpen} {...longPress}>
         <DishImage item={item} themeColor={themeColor} sizes="78px" />
         {item.badge && (
           <span
@@ -1089,7 +1110,7 @@ const RowCard = memo(function RowCard({
         )}
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col" {...longPress}>
+      <div className="flex-1 min-w-0 flex flex-col cursor-pointer" onClick={onOpen} {...longPress}>
         <div className="flex items-center gap-1.5">
           <VegIndicator type={item.food_type} />
           <h3 className="text-[14px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
@@ -1284,60 +1305,20 @@ const CartSheet = memo(function CartSheet({
   );
 });
 
-const RatingSheet = memo(function RatingSheet({
-  item,
-  themeColor,
-  onClose,
-  onRate,
-}: {
-  item: MenuItem;
-  themeColor: string;
-  onClose: () => void;
-  onRate: (value: number) => void;
-}) {
-  const [hover, setHover] = useState(0);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40" />
-      <div className={`relative bg-white rounded-t-3xl w-full ${FRAME} p-6 pb-9`} onClick={(e) => e.stopPropagation()}>
-        <div className="w-10 h-1 rounded-full bg-[#E5E7EB] mx-auto mb-5" />
-        <p className="text-center text-sm text-[#6B7280]">How was</p>
-        <p className="text-center text-base font-semibold text-[#0F0E17] mb-6">{item.name}</p>
-        <div className="flex items-center justify-center gap-2">
-          {[1, 2, 3, 4, 5].map((s) => {
-            const active = s <= hover;
-            return (
-              <button
-                key={s}
-                onMouseEnter={() => setHover(s)}
-                onMouseLeave={() => setHover(0)}
-                onClick={() => onRate(s)}
-                className="w-10 h-10 flex items-center justify-center min-h-0 min-w-0"
-                aria-label={`Rate ${s} star${s > 1 ? "s" : ""}`}
-              >
-                <Star size={34} style={{ color: active ? themeColor : "#E5E7EB", fill: active ? themeColor : "transparent" }} />
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-});
-
 function OrderStatus({
   order,
   themeColor,
   onCancel,
   onBack,
   onAddMore,
+  onRateItem,
 }: {
   order: ActiveOrder;
   themeColor: string;
   onCancel: () => void | Promise<void>;
   onBack: () => void;
   onAddMore: () => void;
+  onRateItem: (itemId: string, value: number) => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [cancelling, setCancelling] = useState(false);
@@ -1475,7 +1456,16 @@ function OrderStatus({
         )}
 
         {completed && (
-          <p className="mt-4 text-center text-sm text-[#6B7280]">Your order has been served. Enjoy your meal! 🍽️</p>
+          <>
+            <p className="mt-4 text-center text-sm text-[#6B7280]">Your order has been served. Enjoy your meal! 🍽️</p>
+            {/* Ask right after serving — ratings from someone who verifiably ate
+                the dish are the ones worth showing the next guest. */}
+            <RateDishes
+              items={order.items.map((c) => ({ itemId: c.itemId, name: c.name }))}
+              themeColor={themeColor}
+              onRate={onRateItem}
+            />
+          </>
         )}
 
         {cancelled && <p className="mt-4 text-center text-sm text-[#6B7280]">This order was cancelled.</p>}

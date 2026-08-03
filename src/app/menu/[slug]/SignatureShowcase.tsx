@@ -20,7 +20,8 @@ interface Props {
   currencySymbol?: string;
   onAdd: (item: MenuItem) => void;
   onDec: (itemId: string) => void;
-  onRate: (item: MenuItem) => void;
+  /** Open the dish detail sheet — tapping the photo or long-pressing the card. */
+  onOpen: (item: MenuItem) => void;
 }
 
 function useLongPress(onLongPress: () => void, ms = 500) {
@@ -68,7 +69,7 @@ export const RealRating = memo(function RealRating({
   );
 });
 
-function DishPhoto({
+export function DishPhoto({
   item,
   themeColor,
   sizes,
@@ -103,7 +104,7 @@ function DishPhoto({
   );
 }
 
-const AddControl = memo(function AddControl({
+export const AddControl = memo(function AddControl({
   qty,
   onAdd,
   onDec,
@@ -181,7 +182,7 @@ const Hero = memo(function Hero({
   qty,
   onAdd,
   onDec,
-  onRate,
+  onOpen,
 }: {
   item: MenuItem;
   themeColor: string;
@@ -190,14 +191,14 @@ const Hero = memo(function Hero({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  onRate: () => void;
+  onOpen: () => void;
 }) {
-  const longPress = useLongPress(onRate);
+  const longPress = useLongPress(onOpen);
   return (
     <div className="px-4">
       <div className="rounded-[22px] overflow-hidden bg-white border border-[#EFEFF1] shadow-[0_10px_36px_rgba(17,17,26,0.07)]">
         {/* 4:3 gives a plated dish room to actually look like food. */}
-        <div className="relative w-full aspect-[4/3] bg-[#F4F4F6]" {...longPress}>
+        <div className="relative w-full aspect-[4/3] bg-[#F4F4F6] cursor-pointer" onClick={onOpen} {...longPress}>
           <DishPhoto item={item} themeColor={themeColor} sizes="(max-width: 480px) 100vw, 460px" priority />
           {item.badge && (
             <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-[11px] font-bold text-[#1C1C2E] px-2.5 py-1 rounded-full shadow-sm">
@@ -251,7 +252,7 @@ const RailCard = memo(function RailCard({
   qty,
   onAdd,
   onDec,
-  onRate,
+  onOpen,
 }: {
   item: MenuItem;
   themeColor: string;
@@ -260,13 +261,14 @@ const RailCard = memo(function RailCard({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  onRate: () => void;
+  onOpen: () => void;
 }) {
-  const longPress = useLongPress(onRate);
+  const longPress = useLongPress(onOpen);
   return (
     <div className="flex-shrink-0 w-[168px] snap-start">
       <div
-        className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#F4F4F6] border border-[#EFEFF1] shadow-[0_6px_20px_rgba(17,17,26,0.06)]"
+        className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#F4F4F6] border border-[#EFEFF1] shadow-[0_6px_20px_rgba(17,17,26,0.06)] cursor-pointer"
+        onClick={onOpen}
         {...longPress}
       >
         <DishPhoto item={item} themeColor={themeColor} sizes="168px" />
@@ -315,7 +317,7 @@ export const SignatureShowcase = memo(function SignatureShowcase({
   currencySymbol = "₹",
   onAdd,
   onDec,
-  onRate,
+  onOpen,
 }: Props) {
   // Which special leads. Ranked on things that are actually true: a real rating
   // average, an owner-written badge, whether there is a photo worth showing
@@ -353,7 +355,7 @@ export const SignatureShowcase = memo(function SignatureShowcase({
         qty={cartQty[hero.id] ?? 0}
         onAdd={() => onAdd(hero)}
         onDec={() => onDec(hero.id)}
-        onRate={() => onRate(hero)}
+        onOpen={() => onOpen(hero)}
       />
 
       {rest.length > 0 && (
@@ -370,7 +372,7 @@ export const SignatureShowcase = memo(function SignatureShowcase({
                 qty={cartQty[item.id] ?? 0}
                 onAdd={() => onAdd(item)}
                 onDec={() => onDec(item.id)}
-                onRate={() => onRate(item)}
+                onOpen={() => onOpen(item)}
               />
             ))}
           </div>
