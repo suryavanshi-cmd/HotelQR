@@ -77,3 +77,29 @@ a,
   content-visibility: auto;
   contain-intrinsic-size: auto 480px;
 }
+
+/* Escape hatch for jump-to-category. An unpainted .cv-section is only as tall
+   as its estimated size, so the scroll target drifts while a smooth scroll runs
+   past it. useCategoryNav puts this on <body> for the duration of a jump so
+   every section reports its real height, then removes it. */
+body.cv-measure .cv-section {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .smooth-scroll {
+    scroll-behavior: auto;
+  }
+
+  /* Idle loops (the Speciality banner float and shimmer) are opted out in JS;
+     this catches anything CSS-driven. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

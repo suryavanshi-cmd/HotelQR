@@ -1,10 +1,11 @@
 "use client";
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
-import { Search, X, Plus, Minus, Bell, Star, Sparkles, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
+import { Search, X, Plus, Minus, Bell, Star, Sparkles, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
+import { useCategoryNav } from "./useCategoryNav";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
@@ -86,7 +87,6 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [foodFilter, setFoodFilter] = useState<FoodFilter>("all");
-  const [activeCatId, setActiveCatId] = useState<string | null>(categories[0]?.id ?? null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [placing, setPlacing] = useState(false);
@@ -99,12 +99,19 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   const [statusOpen, setStatusOpen] = useState(false);
   // Floating "MENU" jump-to-category sheet (Swiggy/Zomato style).
   const [catSheetOpen, setCatSheetOpen] = useState(false);
-  const catTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   // Measure the sticky filter bar so category headers pin flush beneath it
   // (no hardcoded offset → no gap/overlap as content scrolls under).
   const navRef = useRef<HTMLDivElement | null>(null);
   const [navH, setNavH] = useState(150);
+  // A jump requested while its section was filtered out — replayed once the
+  // section is back in the DOM (see the effect below).
+  const [pendingJump, setPendingJump] = useState<string | null>(null);
   const supabase = createClient();
+
+  const { activeCatId, registerTab, stripRef, scrollToCategory, scrollToTop } = useCategoryNav({
+    categories,
+    navH,
+  });
 
   useEffect(() => {
     const el = navRef.current;
@@ -248,11 +255,34 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrder?.id, activeOrder?.status, supabase]);
 
-  function selectCat(catId: string) {
-    setActiveCatId(catId);
-    document.getElementById(`cat-${catId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    catTabRefs.current[catId]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-  }
+  // A category section is only in the DOM while it survives the active search
+  // and veg filter. Tapping a tab for a filtered-out category used to do
+  // nothing at all; now we clear what's hiding it and jump on the next render.
+  const selectCat = useCallback(
+    (catId: string) => {
+      if (scrollToCategory(catId)) return;
+      setSearch("");
+      setDebouncedSearch("");
+      setFoodFilter("all");
+      setPendingJump(catId);
+    },
+    [scrollToCategory],
+  );
+
+  useEffect(() => {
+    if (!pendingJump) return;
+    if (!document.getElementById(`cat-${pendingJump}`)) return;
+    setPendingJump(null);
+    scrollToCategory(pendingJump);
+  }, [pendingJump, filteredByCat, scrollToCategory]);
+
+  // Tapping the nudge jumps straight to the special menu. Hotels without a
+  // named "Speciality" category surface their specials in the rail at the top
+  // instead, so send the customer there rather than nowhere.
+  const openSpecial = useCallback(() => {
+    if (specialCat) selectCat(specialCat.id);
+    else scrollToTop();
+  }, [specialCat, selectCat, scrollToTop]);
 
   const addToCart = useCallback((item: MenuItem) => {
     setCart((prev) => {
@@ -520,24 +550,33 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
             ))}
           </div>
 
-          {/* Category tabs */}
-          <div className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                ref={(el) => {
-                  catTabRefs.current[cat.id] = el;
-                }}
-                onClick={() => selectCat(cat.id)}
-                className={[
-                  "px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 border min-h-0",
-                  activeCatId === cat.id ? "text-white border-transparent" : "bg-white text-[#6B7280] border-[#E5E7EB]",
-                ].join(" ")}
-                style={activeCatId === cat.id ? { backgroundColor: themeColor } : {}}
-              >
-                {cat.name}
-              </button>
-            ))}
+          {/* Category tabs — the strip scrolls itself so the tab the customer
+              is currently reading stays centred as they swipe the menu. */}
+          <div ref={stripRef} className="flex gap-2 px-4 pb-2 overflow-x-auto scrollbar-hide">
+            {categories.map((cat) => {
+              const active = activeCatId === cat.id;
+              const isSpecial = specialCat?.id === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  ref={(el) => registerTab(cat.id, el)}
+                  onClick={() => selectCat(cat.id)}
+                  aria-current={active ? "true" : undefined}
+                  className={[
+                    "px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 border min-h-0 flex items-center gap-1",
+                    active
+                      ? "text-white border-transparent"
+                      : isSpecial
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : "bg-white text-[#6B7280] border-[#E5E7EB]",
+                  ].join(" ")}
+                  style={active ? { backgroundColor: isSpecial ? "#B45309" : themeColor } : {}}
+                >
+                  {isSpecial && <ChefHat size={11} className={active ? "text-amber-100" : "text-amber-600"} />}
+                  {cat.name}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -723,7 +762,10 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         items={specialtyItems}
         themeColor={themeColor}
         onAdd={(id) => { const it = items.find((i) => i.id === id); if (it) addToCart(it); }}
-        onViewMenu={() => specialCat && selectCat(specialCat.id)}
+        onViewMenu={openSpecial}
+        // Ride above whatever is occupying the bottom of the screen so the
+        // banner never lands on top of the cart bar or the MENU button.
+        offsetBottom={cartCount > 0 || (activeOrder && !statusOpen) ? 156 : 90}
       />
 
       {/* Rating bottom sheet */}

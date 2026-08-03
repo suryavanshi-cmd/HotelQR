@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, useRef, memo } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
-import { ChefHat, X, Plus, Minus, Sparkles } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ChefHat, X, Plus, Sparkles } from "lucide-react";
 import Image from "next/image";
 
 const BLUR_PLACEHOLDER =
@@ -29,6 +29,12 @@ interface SpecialtyPopupPortalProps {
   onAdd?: (itemId: string) => void;
   onViewMenu?: () => void;
   persistent?: boolean;
+  /**
+   * Distance in px to float the banner above the viewport bottom. The parent
+   * raises it when the cart bar or the MENU button moves up, so the two never
+   * sit on top of each other.
+   */
+  offsetBottom?: number;
 }
 
 // ─── animation variants ──────────────────────────────────────────────────────
@@ -105,11 +111,20 @@ const AddButton = memo(function AddButton({
   onAdd: (id: string) => void;
 }) {
   const [flash, setFlash] = useState(false);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    },
+    [],
+  );
 
   const handleClick = useCallback(() => {
     onAdd(itemId);
     setFlash(true);
-    setTimeout(() => setFlash(false), 650);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlash(false), 650);
   }, [itemId, onAdd]);
 
   return (
@@ -240,10 +255,13 @@ export function SpecialtyPopupPortal({
   onAdd,
   onViewMenu,
   persistent = false,
+  offsetBottom = 90,
 }: SpecialtyPopupPortalProps) {
   const [mounted, setMounted] = useState(false);
   const [barVisible, setBarVisible] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const reopenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -258,7 +276,15 @@ export function SpecialtyPopupPortal({
     };
   }, [isEnabled, durationSeconds, persistent]);
 
+  useEffect(
+    () => () => {
+      if (reopenTimer.current) clearTimeout(reopenTimer.current);
+    },
+    [],
+  );
+
   const openSheet = useCallback(() => {
+    if (reopenTimer.current) clearTimeout(reopenTimer.current);
     setBarVisible(false);
     setSheetOpen(true);
   }, []);
@@ -266,8 +292,33 @@ export function SpecialtyPopupPortal({
   const closeSheet = useCallback(() => {
     setSheetOpen(false);
     // In persistent mode, bring the banner back so it remains discoverable.
-    if (persistent) setTimeout(() => setBarVisible(true), 350);
+    if (!persistent) return;
+    if (reopenTimer.current) clearTimeout(reopenTimer.current);
+    reopenTimer.current = setTimeout(() => setBarVisible(true), 350);
   }, [persistent]);
+
+  // Lock the page behind the sheet. Without this the menu scrolls under the
+  // backdrop on iOS as soon as a drag overshoots the item list.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    // `overflow` only — never `touch-action: none` here: the sheet is portalled
+    // into <body>, and touch-action walks up the ancestor chain, so that would
+    // also kill scrolling inside the dish list.
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [sheetOpen]);
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeSheet();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetOpen, closeSheet]);
 
   const handleAdd = useCallback(
     (itemId: string) => {
@@ -282,7 +333,10 @@ export function SpecialtyPopupPortal({
   return createPortal(
     <>
       {/* ─── Floating premium banner ──────────────────────────────────────── */}
-      <div className="fixed bottom-[90px] left-1/2 -translate-x-1/2 z-[9999] pointer-events-none">
+      <div
+        className="fixed left-1/2 -translate-x-1/2 z-[9999] pointer-events-none transition-[bottom] duration-300 ease-out"
+        style={{ bottom: offsetBottom }}
+      >
         <AnimatePresence>
           {barVisible && (
             <motion.div
@@ -293,10 +347,12 @@ export function SpecialtyPopupPortal({
               exit="exit"
               className="pointer-events-auto relative"
             >
-              {/* Floating idle animation wraps the pill */}
+              {/* A few bobs to catch the eye, then it settles. Looping forever
+                  kept a tap target permanently in motion — annoying to hit on a
+                  phone — and burned compositor frames for the whole session. */}
               <motion.div
-                animate={{ y: [0, -6, 0] }}
-                transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+                animate={reduceMotion ? undefined : { y: [0, -6, 0] }}
+                transition={{ duration: 3.2, repeat: 2, ease: "easeInOut" }}
               >
                 <button
                   onClick={openSheet}
@@ -309,11 +365,13 @@ export function SpecialtyPopupPortal({
                   }}
                 >
                   {/* Animated shimmer sweep */}
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none"
-                    animate={{ x: ["-100%", "200%"] }}
-                    transition={{ duration: 2.8, repeat: Infinity, ease: "linear", repeatDelay: 1.8 }}
-                  />
+                  {!reduceMotion && (
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-transparent via-white/15 to-transparent pointer-events-none"
+                      animate={{ x: ["-100%", "200%"] }}
+                      transition={{ duration: 2.8, repeat: 2, ease: "linear", repeatDelay: 1.8 }}
+                    />
+                  )}
 
                   {/* Radial glow at top-left */}
                   <div
@@ -379,12 +437,18 @@ export function SpecialtyPopupPortal({
               initial="hidden"
               animate="visible"
               exit="exit"
-              drag="y"
-              dragConstraints={{ top: 0 }}
+              drag={reduceMotion ? false : "y"}
+              // `bottom: 0` gives dragElastic something to rubber-band against;
+              // without it the sheet tracked the finger 1:1 with no resistance.
+              dragConstraints={{ top: 0, bottom: 0 }}
               dragElastic={{ top: 0, bottom: 0.35 }}
+              dragMomentum={false}
               onDragEnd={(_, info) => {
                 if (info.offset.y > 90 || info.velocity.y > 450) closeSheet();
               }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Chef's Specialities"
               className="relative w-full max-w-[460px] max-h-[88vh] flex flex-col rounded-t-[28px] overflow-hidden"
               style={{
                 background: "#FFFFFF",
