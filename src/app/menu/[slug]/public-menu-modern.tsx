@@ -2,11 +2,12 @@
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, Plus, Minus, Bell, Star, Sparkles, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
+import { Search, X, Plus, Minus, Bell, Star, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
+import { SignatureShowcase } from "./SignatureShowcase";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
@@ -171,6 +172,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   const specialItems = useMemo(() => {
     return items.filter((item) => item.is_special && matchesFilters(item, debouncedSearch, foodFilter));
   }, [items, debouncedSearch, foodFilter]);
+
 
   // Optional "Speciality" category (name contains "special") for jump navigation.
   const specialCat = useMemo(() => categories.find((c) => /special/i.test(c.name)) ?? null, [categories]);
@@ -608,43 +610,15 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
 
         {/* Content */}
         <div className="pb-32">
-          {/* Specials — premium horizontal carousel */}
-          {specialItems.length > 0 && (
-            <div className="pt-5 pb-2">
-              {/* Section header */}
-              <div className="px-4 mb-3.5">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <div
-                    className="w-[26px] h-[26px] rounded-lg flex items-center justify-center shadow-sm"
-                    style={{ background: "linear-gradient(135deg, #F59E0B 0%, #EA580C 100%)" }}
-                  >
-                    <ChefHat size={14} className="text-white" />
-                  </div>
-                  <span className="text-[17px] font-extrabold text-[#1C1C2E] tracking-tight">
-                    Chef&apos;s Signature
-                  </span>
-                </div>
-                <p className="text-[11.5px] text-[#9CA3AF] ml-[34px] leading-tight">
-                  Handpicked today&apos;s finest dishes
-                </p>
-              </div>
-              <div className="flex gap-3.5 overflow-x-auto scrollbar-hide px-4 pb-1 rail snap-x scroll-px-4">
-                {specialItems.map((item) => (
-                  <SpecialCard
-                    key={item.id}
-                    item={item}
-                    themeColor={themeColor}
-                    rating={ratings[item.id]}
-                    qty={cartQty[item.id] ?? 0}
-                    onAdd={() => addToCart(item)}
-                    onDec={() => changeQty(item.id, -1)}
-                    onLongPress={() => setRatingItem(item)}
-                  />
-                ))}
-              </div>
-              <div className="h-2 bg-[#F4F4F6] mt-4" />
-            </div>
-          )}
+          <SignatureShowcase
+            items={specialItems}
+            ratings={ratings}
+            cartQty={cartQty}
+            themeColor={themeColor}
+            onAdd={addToCart}
+            onDec={(id) => changeQty(id, -1)}
+            onRate={(item) => setRatingItem(item)}
+          />
 
           {!hasResults ? (
             <div className="flex flex-col items-center text-center py-20 px-4">
@@ -816,7 +790,9 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
         isEnabled={nudgeEnabled && specialtyItems.length > 0}
         durationSeconds={nudgeSeconds}
         persistent={true}
-        items={specialtyItems}
+        // Attach the real rating aggregate so the sheet — where the order
+        // decision actually happens — can show social proof that exists.
+        items={specialtyItems.map((i) => ({ ...i, rating: ratings[i.id] }))}
         themeColor={themeColor}
         onAdd={(id) => { const it = items.find((i) => i.id === id); if (it) addToCart(it); }}
         onViewMenu={openSpecial}
@@ -908,7 +884,21 @@ function RatingPill({ avg, count }: { avg: number; count: number }) {
   );
 }
 
-function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: string; sizes: string }) {
+// The one dish the section leads with. Deliberately restrained: a large photo
+// doing the persuading, then name, description, real rating and price on clean
+// white. No gradient stack, no glow, no shimmer — those competed with the food
+// and made the card read as an ad rather than as something to eat.
+function DishImage({
+  item,
+  themeColor,
+  sizes,
+  priority = false,
+}: {
+  item: MenuItem;
+  themeColor: string;
+  sizes: string;
+  priority?: boolean;
+}) {
   if (item.image_url) {
     return (
       <Image
@@ -916,7 +906,10 @@ function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: st
         alt={item.name}
         fill
         sizes={sizes}
-        loading="lazy"
+        // The hero is the largest thing above the fold — letting it lazy-load
+        // meant the section's whole reason for existing arrived last.
+        priority={priority}
+        loading={priority ? undefined : "lazy"}
         placeholder="blur"
         blurDataURL={BLUR_DATA_URL}
         className="object-cover"
@@ -1116,80 +1109,6 @@ const RowCard = memo(function RowCard({
         <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
     </motion.div>
-  );
-});
-
-const SpecialCard = memo(function SpecialCard({
-  item,
-  themeColor,
-  rating,
-  qty,
-  onAdd,
-  onDec,
-  onLongPress,
-}: {
-  item: MenuItem;
-  themeColor: string;
-  rating?: { sum: number; count: number };
-  qty: number;
-  onAdd: () => void;
-  onDec: () => void;
-  onLongPress: () => void;
-}) {
-  const longPress = useLongPress(onLongPress);
-  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
-  return (
-    <div className="flex-shrink-0 w-[168px] snap-start">
-      {/* Image tile */}
-      <motion.div
-        whileTap={{ scale: 0.96 }}
-        transition={{ type: "spring", stiffness: 400, damping: 22 }}
-        className="relative w-full aspect-square rounded-3xl overflow-hidden bg-amber-50"
-        style={{
-          boxShadow: "0 12px 40px rgba(180,83,9,0.16), 0 4px 12px rgba(0,0,0,0.06)",
-          border: "1.5px solid rgba(245,158,11,0.18)",
-        }}
-      >
-        <DishImage item={item} themeColor={themeColor} sizes="168px" />
-
-        {/* Warm scrim — deeper amber tint at bottom */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#7C2D12]/72 via-[#92400E]/18 to-transparent" />
-
-        {/* Chef's Pick badge */}
-        <div
-          className="absolute top-2.5 left-2.5 flex items-center gap-[5px] text-white text-[10px] font-bold px-2 py-[5px] rounded-full shadow-[0_3px_10px_rgba(180,83,9,0.5)]"
-          style={{ background: "linear-gradient(135deg, #D97706 0%, #EA580C 100%)" }}
-        >
-          <ChefHat size={9} />
-          Chef&apos;s Pick
-        </div>
-
-        {/* Veg dot + name overlay */}
-        <div className="absolute bottom-2.5 left-2.5 right-2.5">
-          <div className="flex items-center gap-1.5">
-            <VegIndicator type={item.food_type} />
-            <span className="text-white text-[13px] font-bold leading-tight line-clamp-1 drop-shadow-lg">
-              {item.name}
-            </span>
-          </div>
-        </div>
-      </motion.div>
-
-      {/* Price + rating + add control */}
-      <div className="flex items-center justify-between gap-2 mt-2.5 px-0.5" {...longPress}>
-        <div className="min-w-0">
-          <p className="text-[15px] font-extrabold text-amber-800 leading-none">₹{item.price}</p>
-          {rating && rating.count >= 3 && (
-            <div className="mt-1.5">
-              <RatingPill avg={avg} count={rating.count} />
-            </div>
-          )}
-        </div>
-        <div className="w-[92px] flex-shrink-0">
-          <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
-        </div>
-      </div>
-    </div>
   );
 });
 

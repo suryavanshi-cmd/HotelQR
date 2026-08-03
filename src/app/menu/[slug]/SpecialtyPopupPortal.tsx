@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef, memo } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChefHat, X, Plus, Sparkles } from "lucide-react";
+import { ChefHat, X, Plus, Sparkles, Star } from "lucide-react";
 import Image from "next/image";
 
 const BLUR_PLACEHOLDER =
@@ -18,6 +18,8 @@ export interface SpecialtyItem {
   image_url?: string | null;
   /** Passed through from MenuItem.badge — shown as an accent chip. */
   badge?: string | null;
+  /** Real aggregate from item_ratings. Omitted when nobody has rated it. */
+  rating?: { sum: number; count: number };
 }
 
 interface SpecialtyPopupPortalProps {
@@ -211,10 +213,8 @@ const SpecialtyCard = memo(function SpecialtyCard({
         )}
         {/* Subtle inset ring to lift image off background */}
         <div className="absolute inset-0 ring-inset ring-1 ring-black/[0.06] rounded-2xl pointer-events-none" />
-        {/* "Chef's Pick" micro-badge */}
-        <div className="absolute -top-0.5 -right-0.5 bg-gradient-to-br from-amber-500 to-orange-500 rounded-bl-xl rounded-tr-2xl px-1.5 py-0.5">
-          <ChefHat size={9} className="text-white" />
-        </div>
+        {/* No per-item chef badge here: every dish in this sheet is a chef's
+            pick, so stamping each one said nothing and covered the food. */}
       </div>
 
       {/* Details */}
@@ -232,12 +232,21 @@ const SpecialtyCard = memo(function SpecialtyCard({
               {item.badge}
             </span>
           )}
+          {item.rating && item.rating.count > 0 && (
+            <span className="inline-flex items-center gap-1 text-[11px] mb-0.5">
+              <Star size={10} className="fill-[#16A34A] text-[#16A34A]" />
+              <span className="font-bold text-[#16A34A] tabular-nums">
+                {(item.rating.sum / item.rating.count).toFixed(1)}
+              </span>
+              <span className="text-[#9CA3AF] tabular-nums">({item.rating.count})</span>
+            </span>
+          )}
           {item.description && (
             <p className="text-[11.5px] text-[#6B7280] leading-snug line-clamp-2 mt-0.5">{item.description}</p>
           )}
         </div>
         <div className="flex items-center justify-between mt-2 gap-2">
-          <span className="text-[16px] font-extrabold text-amber-700 tabular-nums leading-none">
+          <span className="text-[16px] font-extrabold text-[#1C1C2E] tabular-nums leading-none">
             {currencySymbol}{item.price}
           </span>
           <AddButton itemId={item.id} onAdd={onAdd} />
@@ -488,35 +497,22 @@ export function SpecialtyPopupPortal({
               {/* ── Storytelling hero ──────────────────────────────────────── */}
               <div className="mx-4 mb-4 rounded-2xl border border-amber-100 overflow-hidden shrink-0"
                 style={{ background: "linear-gradient(135deg, #FFFBEB 0%, #FFF7ED 50%, #FFFBEB 100%)" }}>
-                <div className="flex gap-3.5 p-4">
-                  {/* Chef icon with glow */}
-                  <div className="shrink-0 relative">
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center shadow-md"
-                      style={{ background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)" }}
-                    >
-                      <ChefHat size={22} className="text-white" />
-                    </div>
-                    {/* Glow */}
-                    <div className="absolute inset-0 rounded-xl blur-md opacity-40"
-                      style={{ background: "linear-gradient(135deg, #F59E0B, #EA580C)" }} />
+                {/* Says what this list is, and nothing it cannot back up. The
+                    previous copy asserted "authentic locally sourced ingredients
+                    and traditional recipes perfected through generations" on
+                    behalf of every hotel using the product — a factual claim
+                    none of them wrote and many cannot stand behind. */}
+                <div className="flex items-center gap-3 p-3.5">
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ background: "linear-gradient(135deg, #F59E0B 0%, #D97706 100%)" }}
+                  >
+                    <ChefHat size={18} className="text-white" />
                   </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-extrabold text-amber-900 tracking-[-0.01em] mb-1 leading-snug">
-                      Crafted by our Master Chefs
-                    </p>
-                    <p className="text-[11.5px] text-amber-800/70 leading-relaxed">
-                      Using authentic locally sourced ingredients and traditional recipes
-                      perfected through generations. Every dish is prepared fresh to deliver
-                      unforgettable flavour in every bite.
-                    </p>
-                  </div>
+                  <p className="text-[12.5px] text-amber-900/80 leading-snug">
+                    The dishes our kitchen is proudest of — chosen by the chef for today.
+                  </p>
                 </div>
-
-                {/* Subtle decorative bottom bar */}
-                <div className="h-[3px]"
-                  style={{ background: "linear-gradient(90deg, #F59E0B 0%, #EA580C 50%, #F59E0B 100%)" }} />
               </div>
 
               {/* ── Items ──────────────────────────────────────────────────── */}

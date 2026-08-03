@@ -1,11 +1,12 @@
 "use client";
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
-import { Search, X, Plus, Minus, Bell, Star, Sparkles, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
+import { Search, X, Plus, Minus, Bell, Star, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
+import { SignatureShowcase } from "./SignatureShowcase";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
@@ -584,30 +585,15 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
 
         {/* Content */}
         <div className="pb-32">
-          {/* Specials — premium horizontal carousel */}
-          {specialItems.length > 0 && (
-            <div className="pt-5 pb-2">
-              <div className="flex items-center gap-1.5 px-4 mb-3">
-                <Sparkles size={17} style={{ color: themeColor }} />
-                <span className="text-[16px] font-extrabold text-[#1C1C2E] tracking-tight">Our Specials</span>
-              </div>
-              <div className="flex gap-3.5 overflow-x-auto scrollbar-hide px-4 pb-1 rail snap-x scroll-px-4">
-                {specialItems.map((item) => (
-                  <SpecialCard
-                    key={item.id}
-                    item={item}
-                    themeColor={themeColor}
-                    rating={ratings[item.id]}
-                    qty={cartQty[item.id] ?? 0}
-                    onAdd={() => addToCart(item)}
-                    onDec={() => changeQty(item.id, -1)}
-                    onLongPress={() => setRatingItem(item)}
-                  />
-                ))}
-              </div>
-              <div className="h-2 bg-[#F4F4F6] mt-4" />
-            </div>
-          )}
+          <SignatureShowcase
+            items={specialItems}
+            ratings={ratings}
+            cartQty={cartQty}
+            themeColor={themeColor}
+            onAdd={addToCart}
+            onDec={(id) => changeQty(id, -1)}
+            onRate={(item) => setRatingItem(item)}
+          />
 
           {!hasResults ? (
             <div className="flex flex-col items-center text-center py-20 px-4">
@@ -770,7 +756,9 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
         isEnabled={nudgeEnabled && specialtyItems.length > 0}
         durationSeconds={nudgeSeconds}
         persistent={true}
-        items={specialtyItems}
+        // Attach the real rating aggregate so the sheet — where the order
+        // decision actually happens — can show social proof that exists.
+        items={specialtyItems.map((i) => ({ ...i, rating: ratings[i.id] }))}
         themeColor={themeColor}
         onAdd={(id) => { const it = items.find((i) => i.id === id); if (it) addToCart(it); }}
         onViewMenu={openSpecial}
@@ -972,61 +960,6 @@ const GridCard = memo(function GridCard({
           <p className="text-[11px] text-[#6B7280] mt-1.5 leading-snug line-clamp-2">{item.description}</p>
         )}
         <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
-      </div>
-    </div>
-  );
-});
-
-const SpecialCard = memo(function SpecialCard({
-  item,
-  themeColor,
-  rating,
-  qty,
-  onAdd,
-  onDec,
-  onLongPress,
-}: {
-  item: MenuItem;
-  themeColor: string;
-  rating?: { sum: number; count: number };
-  qty: number;
-  onAdd: () => void;
-  onDec: () => void;
-  onLongPress: () => void;
-}) {
-  const longPress = useLongPress(onLongPress);
-  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
-  return (
-    <div className="flex-shrink-0 w-[168px] snap-start">
-      <div className="relative w-full aspect-square rounded-3xl overflow-hidden bg-[#F4F4F6] shadow-[0_8px_30px_rgb(0,0,0,0.08)]">
-        <DishImage item={item} themeColor={themeColor} sizes="168px" />
-        {/* gradient scrim for legibility */}
-        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/55 to-transparent" />
-        <span
-          className="absolute top-2.5 left-2.5 flex items-center gap-1 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-md backdrop-blur-sm"
-          style={{ backgroundColor: `${themeColor}E6` }}
-        >
-          <Sparkles size={10} /> SPECIAL
-        </span>
-        <div className="absolute bottom-2.5 left-2.5 right-2.5">
-          <div className="flex items-center gap-1.5">
-            <VegIndicator type={item.food_type} />
-            <span className="text-white text-sm font-bold leading-tight line-clamp-1 drop-shadow">{item.name}</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center justify-between gap-2 mt-2.5 px-0.5" {...longPress}>
-        <div className="min-w-0">
-          <p className="text-[15px] font-bold text-[#1C1C2E] leading-none">₹{item.price}</p>
-          {rating && rating.count >= 3 && (
-            <div className="mt-1.5">
-              <RatingPill avg={avg} count={rating.count} />
-            </div>
-          )}
-        </div>
-        <div className="w-[92px] flex-shrink-0">
-          <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
-        </div>
       </div>
     </div>
   );
