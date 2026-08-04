@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
-import { SignatureShowcase } from "./SignatureShowcase";
+import { SignatureShowcase, AddControl, RealRating } from "./SignatureShowcase";
 import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
@@ -672,7 +672,7 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
                       ))}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3 px-4">
+                    <div className="grid grid-cols-2 gap-2.5 px-4">
                       {catItems.map((item) => (
                         <GridCard
                           key={item.id}
@@ -1019,35 +1019,35 @@ const GridCard = memo(function GridCard({
   onOpen: () => void;
 }) {
   const longPress = useLongPress(onOpen);
-  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
 
   return (
     <motion.div
       whileTap={{ scale: 0.97 }}
-      className="bg-white rounded-2xl border overflow-hidden flex flex-col shadow-[0_8px_30px_rgb(0,0,0,0.04)]"
-      style={{ borderColor: qty > 0 ? themeColor : "#EDEDF0" }}
+      className="bg-white rounded-2xl border overflow-hidden flex flex-col shadow-[0_6px_20px_rgba(17,17,26,0.06)] transition-colors duration-200"
+      style={{ borderColor: qty > 0 ? themeColor : "#EFEFF1" }}
     >
-      {/* Image + overlapping ADD pill. The photo is the biggest tap target on
-          the card, so it opens the detail — but taps on the overlaid ADD pill
+      {/* Image + overlapping ADD control. Trimmed from a full square to 5:4 —
+          still reads as a proper food photo but gives back real height across
+          a whole screen of cards. The photo is the biggest tap target on the
+          card, so it opens the detail — but taps on the overlaid ADD control
           must keep adding, hence the closest("button") guard. */}
       <div
-        className="relative w-full aspect-square bg-[#F4F4F6] cursor-pointer"
+        className="relative w-full aspect-[5/4] bg-[#F4F4F6] cursor-pointer"
         onClick={(e) => {
           if (!(e.target as HTMLElement).closest("button")) onOpen();
         }}
       >
         <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
+        {/* Same white/blur badge treatment as the Signature cards — an owner's
+            badge might say "New" or "Spicy", not just something rating-shaped,
+            so it no longer carries a star icon implying otherwise. */}
         {item.badge && (
-          <span
-            className="absolute top-2 left-2 flex items-center gap-0.5 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-md"
-            style={{ backgroundColor: themeColor }}
-          >
-            <Star size={9} style={{ fill: "#fff", color: "#fff" }} />
+          <span className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm text-[10px] font-bold text-[#1C1C2E] px-2 py-0.5 rounded-full shadow-sm">
             {item.badge}
           </span>
         )}
         <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 w-[72%] max-w-[120px]">
-          <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+          <AddControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
         </div>
       </div>
 
@@ -1057,13 +1057,13 @@ const GridCard = memo(function GridCard({
           <VegIndicator type={item.food_type} />
           <h3 className="text-[13.5px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
         </div>
-        {rating && rating.count >= 3 && (
-          <div className="mt-1.5">
-            <RatingPill avg={avg} count={rating.count} />
+        {rating && rating.count > 0 && (
+          <div className="mt-1">
+            <RealRating rating={rating} />
           </div>
         )}
         {item.description && (
-          <p className="text-[11px] text-[#6B7280] mt-1.5 leading-snug line-clamp-2">{item.description}</p>
+          <p className="text-[11px] text-[#6B7280] mt-1 leading-snug line-clamp-1">{item.description}</p>
         )}
         <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
       </div>

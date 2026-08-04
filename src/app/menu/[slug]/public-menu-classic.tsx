@@ -1,12 +1,13 @@
 "use client";
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
-import { Search, X, Plus, Minus, Bell, Star, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { Search, X, Plus, Minus, Bell, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
-import { SignatureShowcase } from "./SignatureShowcase";
+import { SignatureShowcase, AddControl, RealRating } from "./SignatureShowcase";
 import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
@@ -627,7 +628,7 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
                     </h2>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 px-4">
+                  <div className="grid grid-cols-2 gap-2.5 px-4">
                     {catItems.map((item) => (
                       <GridCard
                         key={item.id}
@@ -820,17 +821,6 @@ function useLongPress(onLongPress: () => void, ms = 500) {
   };
 }
 
-// Compact green rating badge (Zomato style) — a trust signal at a glance.
-function RatingPill({ avg, count }: { avg: number; count: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 bg-[#E7F6EC] text-[#1B7A3D] text-[11px] font-bold px-1.5 py-[3px] rounded-md leading-none">
-      <Star size={9} style={{ fill: "#1B7A3D", color: "#1B7A3D" }} />
-      {avg.toFixed(1)}
-      <span className="text-[#4A9E6A] font-semibold">({count})</span>
-    </span>
-  );
-}
-
 function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: string; sizes: string }) {
   if (item.image_url) {
     return (
@@ -853,68 +843,8 @@ function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: st
   );
 }
 
-// Zomato/Swiggy-style ADD control that sits over the dish image: a white "ADD"
-// pill until the item is in the cart, then an inline −/qty/+ stepper.
-function AddPill({
-  qty,
-  onAdd,
-  onDec,
-  themeColor,
-}: {
-  qty: number;
-  onAdd: () => void;
-  onDec: () => void;
-  themeColor: string;
-}) {
-  if (qty === 0) {
-    return (
-      <button
-        onClick={onAdd}
-        className="w-full h-9 rounded-xl bg-white border shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex items-center justify-center gap-1 font-extrabold text-[13px] tracking-wider active:scale-95 transition-transform min-h-0"
-        style={{ borderColor: `${themeColor}40`, color: themeColor }}
-        aria-label="Add to order"
-      >
-        ADD
-        <Plus size={14} strokeWidth={3} />
-      </button>
-    );
-  }
-  return (
-    <div
-      className="w-full h-9 rounded-xl bg-white border shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex items-center justify-between"
-      style={{ borderColor: themeColor }}
-    >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDec();
-        }}
-        className="h-full px-2.5 flex items-center justify-center min-h-0 min-w-0"
-        style={{ color: themeColor }}
-        aria-label="Decrease quantity"
-      >
-        <Minus size={15} strokeWidth={3} />
-      </button>
-      <span className="font-extrabold text-sm tabular-nums select-none" style={{ color: themeColor }}>
-        {qty}
-      </span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onAdd();
-        }}
-        className="h-full px-2.5 flex items-center justify-center min-h-0 min-w-0"
-        style={{ color: themeColor }}
-        aria-label="Increase quantity"
-      >
-        <Plus size={15} strokeWidth={3} />
-      </button>
-    </div>
-  );
-}
-
-// Compact 2-up grid card: image on top with the ADD pill straddling its lower
-// edge, details below. Two of these sit side-by-side per row.
+// Compact 2-up grid card: image on top with the ADD control straddling its
+// lower edge, details below. Two of these sit side-by-side per row.
 const GridCard = memo(function GridCard({
   item,
   themeColor,
@@ -934,34 +864,35 @@ const GridCard = memo(function GridCard({
   onOpen: () => void;
 }) {
   const longPress = useLongPress(onOpen);
-  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
 
   return (
-    <div
-      className="bg-white rounded-2xl border overflow-hidden flex flex-col"
-      style={{ borderColor: qty > 0 ? themeColor : "#EDEDF0" }}
+    <motion.div
+      whileTap={{ scale: 0.97 }}
+      className="bg-white rounded-2xl border overflow-hidden flex flex-col shadow-[0_6px_20px_rgba(17,17,26,0.06)] transition-colors duration-200"
+      style={{ borderColor: qty > 0 ? themeColor : "#EFEFF1" }}
     >
-      {/* Image + overlapping ADD pill. The photo is the biggest tap target on
-          the card, so it opens the detail — but taps on the overlaid ADD pill
+      {/* Image + overlapping ADD control. Trimmed from a full square to 5:4 —
+          still reads as a proper food photo but gives back real height across
+          a whole screen of cards. The photo is the biggest tap target on the
+          card, so it opens the detail — but taps on the overlaid ADD control
           must keep adding, hence the closest("button") guard. */}
       <div
-        className="relative w-full aspect-square bg-[#F4F4F6] cursor-pointer"
+        className="relative w-full aspect-[5/4] bg-[#F4F4F6] cursor-pointer"
         onClick={(e) => {
           if (!(e.target as HTMLElement).closest("button")) onOpen();
         }}
       >
         <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
+        {/* Same white/blur badge treatment as the Signature cards — an owner's
+            badge might say "New" or "Spicy", not just something rating-shaped,
+            so it no longer carries a star icon implying otherwise. */}
         {item.badge && (
-          <span
-            className="absolute top-2 left-2 flex items-center gap-0.5 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow"
-            style={{ backgroundColor: themeColor }}
-          >
-            <Star size={9} style={{ fill: "#fff", color: "#fff" }} />
+          <span className="absolute top-2 left-2 bg-white/95 backdrop-blur-sm text-[10px] font-bold text-[#1C1C2E] px-2 py-0.5 rounded-full shadow-sm">
             {item.badge}
           </span>
         )}
         <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 w-[72%] max-w-[120px]">
-          <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+          <AddControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
         </div>
       </div>
 
@@ -971,17 +902,17 @@ const GridCard = memo(function GridCard({
           <VegIndicator type={item.food_type} />
           <h3 className="text-[13.5px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
         </div>
-        {rating && rating.count >= 3 && (
-          <div className="mt-1.5">
-            <RatingPill avg={avg} count={rating.count} />
+        {rating && rating.count > 0 && (
+          <div className="mt-1">
+            <RealRating rating={rating} />
           </div>
         )}
         {item.description && (
-          <p className="text-[11px] text-[#6B7280] mt-1.5 leading-snug line-clamp-2">{item.description}</p>
+          <p className="text-[11px] text-[#6B7280] mt-1 leading-snug line-clamp-1">{item.description}</p>
         )}
         <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
       </div>
-    </div>
+    </motion.div>
   );
 });
 
