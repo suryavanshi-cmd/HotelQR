@@ -2,20 +2,16 @@
 import { useState, useRef, useMemo, useEffect, useCallback, memo } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, X, Plus, Minus, Bell, Star, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
+import { Search, X, Plus, Minus, Bell, ChefHat, Clock, CheckCircle2, XCircle, ChevronLeft, List, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
-import { SignatureShowcase, AddControl, RealRating } from "./SignatureShowcase";
+import { SignatureShowcase, AddControl, RealRating, DishPhoto } from "./SignatureShowcase";
 import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
-
-// Tiny valid JPEG used as a blur-up placeholder for item images.
-const BLUR_DATA_URL =
-  "data:image/jpeg;base64,/9j/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=";
 
 // A QR scan is always a phone — render a single mobile-width column, centered
 // in a dark gutter on desktop.
@@ -885,121 +881,8 @@ function useLongPress(onLongPress: () => void, ms = 500) {
   };
 }
 
-// Compact green rating badge (Zomato style) — a trust signal at a glance.
-function RatingPill({ avg, count }: { avg: number; count: number }) {
-  return (
-    <span className="inline-flex items-center gap-1 bg-[#E7F6EC] text-[#1B7A3D] text-[11px] font-bold px-1.5 py-[3px] rounded-md leading-none">
-      <Star size={9} style={{ fill: "#1B7A3D", color: "#1B7A3D" }} />
-      {avg.toFixed(1)}
-      <span className="text-[#4A9E6A] font-semibold">({count})</span>
-    </span>
-  );
-}
-
-// The one dish the section leads with. Deliberately restrained: a large photo
-// doing the persuading, then name, description, real rating and price on clean
-// white. No gradient stack, no glow, no shimmer — those competed with the food
-// and made the card read as an ad rather than as something to eat.
-function DishImage({
-  item,
-  themeColor,
-  sizes,
-  priority = false,
-}: {
-  item: MenuItem;
-  themeColor: string;
-  sizes: string;
-  priority?: boolean;
-}) {
-  if (item.image_url) {
-    return (
-      <Image
-        src={item.image_url}
-        alt={item.name}
-        fill
-        sizes={sizes}
-        // The hero is the largest thing above the fold — letting it lazy-load
-        // meant the section's whole reason for existing arrived last.
-        priority={priority}
-        loading={priority ? undefined : "lazy"}
-        placeholder="blur"
-        blurDataURL={BLUR_DATA_URL}
-        className="object-cover"
-      />
-    );
-  }
-  return (
-    <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}14` }}>
-      <span className="text-3xl opacity-50">🍽️</span>
-    </div>
-  );
-}
-
-// Zomato/Swiggy-style ADD control that sits over the dish image: a white "ADD"
-// pill until the item is in the cart, then an inline −/qty/+ stepper.
-function AddPill({
-  qty,
-  onAdd,
-  onDec,
-  themeColor,
-}: {
-  qty: number;
-  onAdd: () => void;
-  onDec: () => void;
-  themeColor: string;
-}) {
-  if (qty === 0) {
-    return (
-      <motion.button
-        whileTap={{ scale: 0.92 }}
-        onClick={onAdd}
-        className="w-full h-9 rounded-xl bg-white border shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex items-center justify-center gap-1 font-extrabold text-[13px] tracking-wider min-h-0"
-        style={{ borderColor: `${themeColor}40`, color: themeColor }}
-        aria-label="Add to order"
-      >
-        ADD
-        <Plus size={14} strokeWidth={3} />
-      </motion.button>
-    );
-  }
-  return (
-    <motion.div
-      initial={{ scale: 0.9, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      className="w-full h-9 rounded-xl bg-white border shadow-[0_4px_12px_rgba(0,0,0,0.12)] flex items-center justify-between"
-      style={{ borderColor: themeColor }}
-    >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDec();
-        }}
-        className="h-full px-2.5 flex items-center justify-center min-h-0 min-w-0"
-        style={{ color: themeColor }}
-        aria-label="Decrease quantity"
-      >
-        <Minus size={15} strokeWidth={3} />
-      </button>
-      <motion.span key={qty} initial={{ scale: 1.3 }} animate={{ scale: 1 }} className="font-extrabold text-sm tabular-nums select-none" style={{ color: themeColor }}>
-        {qty}
-      </motion.span>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onAdd();
-        }}
-        className="h-full px-2.5 flex items-center justify-center min-h-0 min-w-0"
-        style={{ color: themeColor }}
-        aria-label="Increase quantity"
-      >
-        <Plus size={15} strokeWidth={3} />
-      </button>
-    </motion.div>
-  );
-}
-
-// Compact 2-up grid card: image on top with the ADD pill straddling its lower
-// edge, details below. Two of these sit side-by-side per row.
+// Compact 2-up grid card: image on top with the ADD control straddling its
+// lower edge, details below. Two of these sit side-by-side per row.
 const GridCard = memo(function GridCard({
   item,
   themeColor,
@@ -1037,7 +920,7 @@ const GridCard = memo(function GridCard({
           if (!(e.target as HTMLElement).closest("button")) onOpen();
         }}
       >
-        <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
+        <DishPhoto item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
         {/* Same white/blur badge treatment as the Signature cards — an owner's
             badge might say "New" or "Spicy", not just something rating-shaped,
             so it no longer carries a star icon implying otherwise. */}
@@ -1093,18 +976,15 @@ const RowCard = memo(function RowCard({
   onOpen: () => void;
 }) {
   const longPress = useLongPress(onOpen);
-  const avg = rating && rating.count > 0 ? rating.sum / rating.count : 0;
 
   return (
     <motion.div whileTap={{ scale: 0.99 }} className="flex gap-3 py-3">
       <div className="relative w-[78px] h-[78px] rounded-xl overflow-hidden bg-[#F4F4F6] shrink-0 cursor-pointer" onClick={onOpen} {...longPress}>
-        <DishImage item={item} themeColor={themeColor} sizes="78px" />
+        <DishPhoto item={item} themeColor={themeColor} sizes="78px" />
+        {/* Same white/blur badge as every other card — no star icon, since an
+            owner's badge is arbitrary text ("New", "Spicy"), not a rating. */}
         {item.badge && (
-          <span
-            className="absolute top-1 left-1 flex items-center gap-0.5 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-md"
-            style={{ backgroundColor: themeColor }}
-          >
-            <Star size={8} style={{ fill: "#fff", color: "#fff" }} />
+          <span className="absolute top-1 left-1 bg-white/95 backdrop-blur-sm text-[9px] font-bold text-[#1C1C2E] px-1.5 py-0.5 rounded-full shadow-sm">
             {item.badge}
           </span>
         )}
@@ -1115,9 +995,9 @@ const RowCard = memo(function RowCard({
           <VegIndicator type={item.food_type} />
           <h3 className="text-[14px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
         </div>
-        {rating && rating.count >= 3 && (
+        {rating && rating.count > 0 && (
           <div className="mt-1">
-            <RatingPill avg={avg} count={rating.count} />
+            <RealRating rating={rating} />
           </div>
         )}
         {item.description && (
@@ -1127,7 +1007,7 @@ const RowCard = memo(function RowCard({
       </div>
 
       <div className="w-[88px] shrink-0 self-center">
-        <AddPill qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
+        <AddControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />
       </div>
     </motion.div>
   );

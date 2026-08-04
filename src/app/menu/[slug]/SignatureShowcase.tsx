@@ -2,7 +2,7 @@
 import { memo, useMemo, useRef } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
-import { ChefHat, Star, Plus, Minus } from "lucide-react";
+import { ChefHat, Star, Plus, Minus, UtensilsCrossed } from "lucide-react";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import type { MenuItem } from "@/types/database";
 
@@ -69,6 +69,21 @@ export const RealRating = memo(function RealRating({
   );
 });
 
+/**
+ * The single dish-photo renderer, shared by every card size (hero, rail,
+ * grid, row, detail sheet). A real photo gets a very light saturation lift —
+ * the same trick food photography and delivery apps lean on, since a slightly
+ * richer tone reads as more appetising without looking edited. It changes how
+ * the photo renders, not what the dish is — nothing about the image itself is
+ * fabricated.
+ *
+ * When there is no photo, the old placeholder was a flat tint with a plate
+ * emoji at half-opacity — it read as a broken image, not a design choice.
+ * Menus built from OCR-scanned paper cards often have no photos for most
+ * dishes, so this state is common, not an edge case, and it now gets a
+ * two-tone gradient plus a monochrome icon tinted to the hotel's own theme
+ * color instead of a stock emoji that clashes with it.
+ */
 export function DishPhoto({
   item,
   themeColor,
@@ -82,8 +97,11 @@ export function DishPhoto({
 }) {
   if (!item.image_url) {
     return (
-      <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}14` }}>
-        <span className="text-3xl opacity-50">🍽️</span>
+      <div
+        className="w-full h-full flex items-center justify-center"
+        style={{ background: `linear-gradient(155deg, ${themeColor}1F 0%, ${themeColor}0A 60%, ${themeColor}14 100%)` }}
+      >
+        <UtensilsCrossed className="w-[30%] h-[30%] max-w-9 max-h-9" style={{ color: `${themeColor}55` }} strokeWidth={1.5} />
       </div>
     );
   }
@@ -99,7 +117,7 @@ export function DishPhoto({
       loading={priority ? undefined : "lazy"}
       placeholder="blur"
       blurDataURL={BLUR_DATA_URL}
-      className="object-cover"
+      className="object-cover saturate-[1.08] contrast-[1.03]"
     />
   );
 }

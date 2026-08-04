@@ -7,15 +7,11 @@ import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
-import { SignatureShowcase, AddControl, RealRating } from "./SignatureShowcase";
+import { SignatureShowcase, AddControl, RealRating, DishPhoto } from "./SignatureShowcase";
 import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
 import type { Hotel, HotelSettings, Category, MenuItem } from "@/types/database";
-
-// Tiny valid JPEG used as a blur-up placeholder for item images.
-const BLUR_DATA_URL =
-  "data:image/jpeg;base64,/9j/2wBDAAMCAgICAgMCAgIDAwMDBAYEBAQEBAgGBgUGCQgKCgkICQkKDA8MCgsOCwkJDRENDg8QEBEQCgwSExIQEw8QEBD/2wBDAQMDAwQDBAgEBAgQCwkLEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBD/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=";
 
 // A QR scan is always a phone — render a single mobile-width column, centered
 // in a dark gutter on desktop.
@@ -821,28 +817,6 @@ function useLongPress(onLongPress: () => void, ms = 500) {
   };
 }
 
-function DishImage({ item, themeColor, sizes }: { item: MenuItem; themeColor: string; sizes: string }) {
-  if (item.image_url) {
-    return (
-      <Image
-        src={item.image_url}
-        alt={item.name}
-        fill
-        sizes={sizes}
-        loading="lazy"
-        placeholder="blur"
-        blurDataURL={BLUR_DATA_URL}
-        className="object-cover"
-      />
-    );
-  }
-  return (
-    <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: `${themeColor}14` }}>
-      <span className="text-3xl opacity-50">🍽️</span>
-    </div>
-  );
-}
-
 // Compact 2-up grid card: image on top with the ADD control straddling its
 // lower edge, details below. Two of these sit side-by-side per row.
 const GridCard = memo(function GridCard({
@@ -882,7 +856,7 @@ const GridCard = memo(function GridCard({
           if (!(e.target as HTMLElement).closest("button")) onOpen();
         }}
       >
-        <DishImage item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
+        <DishPhoto item={item} themeColor={themeColor} sizes="(max-width: 480px) 45vw, 210px" />
         {/* Same white/blur badge treatment as the Signature cards — an owner's
             badge might say "New" or "Spicy", not just something rating-shaped,
             so it no longer carries a star icon implying otherwise. */}
