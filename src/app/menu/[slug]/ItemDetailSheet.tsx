@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X, Star } from "lucide-react";
 import { VegIndicator } from "@/components/ui/VegIndicator";
-import { DishPhoto, AddControl, RealRating } from "./SignatureShowcase";
+import { DishPhoto, AddControl, RealRating, formatPrice } from "./SignatureShowcase";
 import type { MenuItem } from "@/types/database";
 
 /** The one source of truth for "has this device rated this dish already". */
@@ -225,7 +225,7 @@ export function ItemDetailSheet({
           <div className="shrink-0 px-5 py-4 border-t border-[#F0F0F2] bg-white flex items-center justify-between gap-4">
             <span className="text-[22px] font-extrabold text-[#1C1C2E] tabular-nums leading-none">
               {currencySymbol}
-              {item.price}
+              {formatPrice(item.price)}
             </span>
             <div className="w-[150px]">
               <AddControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} big />

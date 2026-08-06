@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
-import { SignatureShowcase, AddControl, RealRating, DishPhoto } from "./SignatureShowcase";
+import { SignatureShowcase, AddControl, RealRating, DishPhoto, formatPrice } from "./SignatureShowcase";
 import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
@@ -834,11 +834,9 @@ const GridCard = memo(function GridCard({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  /** Open the dish detail sheet (tap or long-press). */
+  /** Open the dish detail sheet. */
   onOpen: () => void;
 }) {
-  const longPress = useLongPress(onOpen);
-
   return (
     <motion.div
       whileTap={{ scale: 0.97 }}
@@ -871,7 +869,7 @@ const GridCard = memo(function GridCard({
       </div>
 
       {/* Details */}
-      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1 cursor-pointer" onClick={onOpen} {...longPress}>
+      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1 cursor-pointer" onClick={onOpen}>
         <div className="flex items-center gap-1.5">
           <VegIndicator type={item.food_type} />
           <h3 className="text-[13.5px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
@@ -884,7 +882,7 @@ const GridCard = memo(function GridCard({
         {item.description && (
           <p className="text-[11px] text-[#6B7280] mt-1 leading-snug line-clamp-1">{item.description}</p>
         )}
-        <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
+        <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{formatPrice(item.price)}</p>
       </div>
     </motion.div>
   );

@@ -1,5 +1,5 @@
 "use client";
-import { memo, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { ChefHat, Star, Plus, Minus, UtensilsCrossed } from "lucide-react";
@@ -11,6 +11,15 @@ const BLUR_DATA_URL =
 
 export type RatingAgg = Record<string, { sum: number; count: number }>;
 
+// Indian digit grouping (₹1,20,000, not ₹120,000) — the menus this app
+// serves are priced in rupees, and most dish prices are under 1,000 so this
+// is a no-op there; it only kicks in for the family-thali/buffet-package
+// prices where the grouping actually helps at a glance.
+const priceFormatter = new Intl.NumberFormat("en-IN");
+export function formatPrice(price: number): string {
+  return priceFormatter.format(price);
+}
+
 interface Props {
   /** Already filtered to available specials by the caller. */
   items: MenuItem[];
@@ -20,30 +29,8 @@ interface Props {
   currencySymbol?: string;
   onAdd: (item: MenuItem) => void;
   onDec: (itemId: string) => void;
-  /** Open the dish detail sheet — tapping the photo or long-pressing the card. */
+  /** Open the dish detail sheet — tapping anywhere on the card. */
   onOpen: (item: MenuItem) => void;
-}
-
-function useLongPress(onLongPress: () => void, ms = 500) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clear = () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-  };
-  const start = () => {
-    clear();
-    timer.current = setTimeout(onLongPress, ms);
-  };
-  return {
-    onTouchStart: start,
-    onTouchEnd: clear,
-    onTouchMove: clear,
-    onMouseDown: start,
-    onMouseUp: clear,
-    onMouseLeave: clear,
-  };
 }
 
 /**
@@ -77,12 +64,13 @@ export const RealRating = memo(function RealRating({
  * the photo renders, not what the dish is — nothing about the image itself is
  * fabricated.
  *
- * When there is no photo, the old placeholder was a flat tint with a plate
- * emoji at half-opacity — it read as a broken image, not a design choice.
- * Menus built from OCR-scanned paper cards often have no photos for most
- * dishes, so this state is common, not an edge case, and it now gets a
- * two-tone gradient plus a monochrome icon tinted to the hotel's own theme
- * color instead of a stock emoji that clashes with it.
+ * When there is no photo — or the photo URL 404s, which happens when a
+ * hotel deletes an image from storage without clearing it from the dish, or
+ * an OCR import saves a URL that never resolves — the old placeholder was a
+ * flat tint with a plate emoji at half-opacity, and a broken image had no
+ * placeholder at all: the browser's own broken-image icon. Both read as an
+ * error, not a design choice. Now either case gets the same two-tone
+ * gradient plus a monochrome icon tinted to the hotel's own theme color.
  */
 export function DishPhoto({
   item,
@@ -95,7 +83,12 @@ export function DishPhoto({
   sizes: string;
   priority?: boolean;
 }) {
-  if (!item.image_url) {
+  const [failed, setFailed] = useState(false);
+  // A new photo URL (admin swapped it, or the customer scrolled to a
+  // different dish reusing this instance) deserves a fresh attempt.
+  useEffect(() => setFailed(false), [item.image_url]);
+
+  if (!item.image_url || failed) {
     return (
       <div
         className="w-full h-full flex items-center justify-center"
@@ -117,6 +110,7 @@ export function DishPhoto({
       loading={priority ? undefined : "lazy"}
       placeholder="blur"
       blurDataURL={BLUR_DATA_URL}
+      onError={() => setFailed(true)}
       className="object-cover saturate-[1.08] contrast-[1.03]"
     />
   );
@@ -211,12 +205,11 @@ const Hero = memo(function Hero({
   onDec: () => void;
   onOpen: () => void;
 }) {
-  const longPress = useLongPress(onOpen);
   return (
     <div className="px-4">
       <div className="rounded-[22px] overflow-hidden bg-white border border-[#EFEFF1] shadow-[0_10px_36px_rgba(17,17,26,0.07)]">
         {/* 4:3 gives a plated dish room to actually look like food. */}
-        <div className="relative w-full aspect-[4/3] bg-[#F4F4F6] cursor-pointer" onClick={onOpen} {...longPress}>
+        <div className="relative w-full aspect-[4/3] bg-[#F4F4F6] cursor-pointer" onClick={onOpen}>
           <DishPhoto item={item} themeColor={themeColor} sizes="(max-width: 480px) 100vw, 460px" priority />
           {item.badge && (
             <span className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-[11px] font-bold text-[#1C1C2E] px-2.5 py-1 rounded-full shadow-sm">
@@ -250,7 +243,7 @@ const Hero = memo(function Hero({
           <div className="mt-4 flex items-center justify-between gap-3">
             <span className="text-[22px] font-extrabold text-[#1C1C2E] tabular-nums leading-none">
               {currencySymbol}
-              {item.price}
+              {formatPrice(item.price)}
             </span>
             <div className="w-[140px]">
               <AddControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} big />
@@ -281,13 +274,11 @@ const RailCard = memo(function RailCard({
   onDec: () => void;
   onOpen: () => void;
 }) {
-  const longPress = useLongPress(onOpen);
   return (
     <div className="flex-shrink-0 w-[168px] snap-start">
       <div
         className="relative w-full aspect-square rounded-2xl overflow-hidden bg-[#F4F4F6] border border-[#EFEFF1] shadow-[0_6px_20px_rgba(17,17,26,0.06)] cursor-pointer"
         onClick={onOpen}
-        {...longPress}
       >
         <DishPhoto item={item} themeColor={themeColor} sizes="168px" />
         {/* A badge only when the owner wrote one. Stamping every dish
@@ -309,7 +300,7 @@ const RailCard = memo(function RailCard({
         </div>
         <p className="text-[15px] font-extrabold text-[#1C1C2E] leading-none tabular-nums mt-1.5">
           {currencySymbol}
-          {item.price}
+          {formatPrice(item.price)}
         </p>
         <div className="mt-2">
           <AddControl qty={qty} onAdd={onAdd} onDec={onDec} themeColor={themeColor} />

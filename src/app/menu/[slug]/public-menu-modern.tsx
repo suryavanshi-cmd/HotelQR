@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { VegIndicator } from "@/components/ui/VegIndicator";
 import { SpecialtyPopupPortal } from "./SpecialtyPopupPortal";
 import { useCategoryNav } from "./useCategoryNav";
-import { SignatureShowcase, AddControl, RealRating, DishPhoto } from "./SignatureShowcase";
+import { SignatureShowcase, AddControl, RealRating, DishPhoto, formatPrice } from "./SignatureShowcase";
 import { ItemDetailSheet, RateDishes } from "./ItemDetailSheet";
 import { createClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/uuid";
@@ -859,28 +859,6 @@ export function PublicMenuModern({ hotel, settings, categories, items: initialIt
   );
 }
 
-function useLongPress(onLongPress: () => void, ms = 500) {
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clear = () => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-  };
-  const start = () => {
-    clear();
-    timer.current = setTimeout(onLongPress, ms);
-  };
-  return {
-    onTouchStart: start,
-    onTouchEnd: clear,
-    onTouchMove: clear,
-    onMouseDown: start,
-    onMouseUp: clear,
-    onMouseLeave: clear,
-  };
-}
-
 // Compact 2-up grid card: image on top with the ADD control straddling its
 // lower edge, details below. Two of these sit side-by-side per row.
 const GridCard = memo(function GridCard({
@@ -898,11 +876,9 @@ const GridCard = memo(function GridCard({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  /** Open the dish detail sheet (tap or long-press). */
+  /** Open the dish detail sheet. */
   onOpen: () => void;
 }) {
-  const longPress = useLongPress(onOpen);
-
   return (
     <motion.div
       whileTap={{ scale: 0.97 }}
@@ -935,7 +911,7 @@ const GridCard = memo(function GridCard({
       </div>
 
       {/* Details */}
-      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1 cursor-pointer" onClick={onOpen} {...longPress}>
+      <div className="px-2.5 pt-5 pb-3 flex flex-col flex-1 cursor-pointer" onClick={onOpen}>
         <div className="flex items-center gap-1.5">
           <VegIndicator type={item.food_type} />
           <h3 className="text-[13.5px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
@@ -948,7 +924,7 @@ const GridCard = memo(function GridCard({
         {item.description && (
           <p className="text-[11px] text-[#6B7280] mt-1 leading-snug line-clamp-1">{item.description}</p>
         )}
-        <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{item.price}</p>
+        <p className="text-[15px] font-bold text-[#1C1C2E] mt-auto pt-2">₹{formatPrice(item.price)}</p>
       </div>
     </motion.div>
   );
@@ -972,14 +948,12 @@ const RowCard = memo(function RowCard({
   qty: number;
   onAdd: () => void;
   onDec: () => void;
-  /** Open the dish detail sheet (tap or long-press). */
+  /** Open the dish detail sheet. */
   onOpen: () => void;
 }) {
-  const longPress = useLongPress(onOpen);
-
   return (
     <motion.div whileTap={{ scale: 0.99 }} className="flex gap-3 py-3">
-      <div className="relative w-[78px] h-[78px] rounded-xl overflow-hidden bg-[#F4F4F6] shrink-0 cursor-pointer" onClick={onOpen} {...longPress}>
+      <div className="relative w-[78px] h-[78px] rounded-xl overflow-hidden bg-[#F4F4F6] shrink-0 cursor-pointer" onClick={onOpen}>
         <DishPhoto item={item} themeColor={themeColor} sizes="78px" />
         {/* Same white/blur badge as every other card — no star icon, since an
             owner's badge is arbitrary text ("New", "Spicy"), not a rating. */}
@@ -990,7 +964,7 @@ const RowCard = memo(function RowCard({
         )}
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col cursor-pointer" onClick={onOpen} {...longPress}>
+      <div className="flex-1 min-w-0 flex flex-col cursor-pointer" onClick={onOpen}>
         <div className="flex items-center gap-1.5">
           <VegIndicator type={item.food_type} />
           <h3 className="text-[14px] font-semibold text-[#1C1C2E] leading-tight line-clamp-1">{item.name}</h3>
@@ -1003,7 +977,7 @@ const RowCard = memo(function RowCard({
         {item.description && (
           <p className="text-[11px] text-[#6B7280] mt-0.5 leading-snug line-clamp-1">{item.description}</p>
         )}
-        <p className="text-[14px] font-bold text-[#1C1C2E] mt-auto pt-1">₹{item.price}</p>
+        <p className="text-[14px] font-bold text-[#1C1C2E] mt-auto pt-1">₹{formatPrice(item.price)}</p>
       </div>
 
       <div className="w-[88px] shrink-0 self-center">
