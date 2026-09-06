@@ -83,6 +83,7 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   const nudgeSeconds = settings?.special_nudge_seconds ?? 5;
   const tableNumber = useMemo(() => tableNumberFromSlug(tableSlug), [tableSlug]);
   const orderKey = `order-${hotel.id}-${tableSlug}`;
+  const cartKey = `cart-${hotel.id}-${tableSlug}`;
 
   const [items, setItems] = useState<MenuItem[]>(initialItems);
   const [search, setSearch] = useState("");
@@ -109,6 +110,10 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
   // section is back in the DOM (see the effect below).
   const [pendingJump, setPendingJump] = useState<string | null>(null);
   const supabase = createClient();
+  // Guards against the persist effect (below) writing an empty cart to
+  // localStorage before the restore effect has had a chance to read it —
+  // both run in the same effect-flush pass on mount, in declaration order.
+  const cartRestoredRef = useRef(false);
 
   const { activeCatId, registerTab, stripRef, scrollToCategory, scrollToTop } = useCategoryNav({
     categories,
@@ -225,6 +230,47 @@ export function PublicMenuClassic({ hotel, settings, categories, items: initialI
       /* ignore */
     }
   }, [orderKey]);
+
+  // Restore the in-progress cart (survives an accidental refresh or the phone
+  // locking mid-order) — the active *order* already did this, but everything
+  // added before "Place order" was tapped just vanished on reload. Dropped
+  // instead of restored: lines for a dish that disappeared from the menu (or
+  // went unavailable) since the cart was saved, so a stale line can't be
+  // placed for something no longer on offer.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(cartKey);
+      if (raw) {
+        const saved = JSON.parse(raw) as { items: CartItem[]; savedAt: number };
+        if (Date.now() - saved.savedAt <= 60 * 60 * 1000) {
+          const stillOffered = new Set(
+            initialItems.filter((i) => i.is_available !== false).map((i) => i.id)
+          );
+          const valid = saved.items.filter((c) => stillOffered.has(c.itemId));
+          if (valid.length > 0) setCart(valid);
+        }
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      cartRestoredRef.current = true;
+    }
+    // initialItems is the mount-time snapshot on purpose — this runs once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartKey]);
+
+  // Keep the cart in sync with localStorage as it changes. Guarded until the
+  // restore effect above has run once, so this can't race it and erase a
+  // just-restored cart back to empty before the user sees it.
+  useEffect(() => {
+    if (!cartRestoredRef.current) return;
+    try {
+      if (cart.length === 0) localStorage.removeItem(cartKey);
+      else localStorage.setItem(cartKey, JSON.stringify({ items: cart, savedAt: Date.now() }));
+    } catch {
+      /* ignore */
+    }
+  }, [cart, cartKey]);
 
   // Live status — poll the token-gated RPC (anon can't SELECT orders) so the
   // customer sees the kitchen move their order through preparing → served
